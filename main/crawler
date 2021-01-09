@@ -1,0 +1,43 @@
+import requests
+import pandas as pd
+import pickle
+from io import StringIO
+import datetime
+import matplotlib as mpl
+import csv
+
+
+def craw_data(date, fileName):
+    url = 'https://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=' + str(date) + '&type=ALL'
+    r = requests.post(url)
+    try:
+        if r.text == "":
+            print("No data for this day")
+            pass
+        elif r.text is not None:
+            r_text_stocks = '\n'.join(
+                [line for line in r.text.split("\n") if len(line.split('",')) == 17 and line[0] != "="])
+            r_pd = pd.read_csv(StringIO(r_text_stocks)).rename(columns={'Unnamed: 16': 'date'})
+            r_pd.loc[:, 'date'] = date
+            with open(str(fileName) + ".csv", "r", encoding="utf-8") as file:
+                # csv_reader = csv.DictReader(file)
+                csv_reader = pd.read_csv(file)
+                if date not in list(csv_reader["date"]):
+                    try:
+                        r_pd.to_csv(str(fileName) + ".csv", mode="a", header=False, encoding="utf_8_sig")
+                    except Exception as error:
+                        print(error)
+                        print("Data of this day already exist")
+
+    except Exception as error:
+        print(error)
+
+#
+# class Crawler:
+#     pass
+
+
+start_day = input('starting day (in format %Y%m%d) :')
+start_day_pd_dt = pd.to_datetime(start_day, format="%Y%m%d", errors="ignore")
+file_name = input('Input File name : ')
+craw_data(start_day, file_name)
