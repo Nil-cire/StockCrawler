@@ -6,31 +6,61 @@ import datetime
 import matplotlib as mpl
 import csv
 
+twseStockUrl = 'https://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date='
 
-def craw_data(date, fileName):
-    url = 'https://www.twse.com.tw/exchangeReport/MI_INDEX?response=csv&date=' + str(date) + '&type=ALL'
+def fetch_data_from_twse(date):
+    dir = pathlib.Path(__file__).parent.absolute()
+    url = twseStockUrl + str(date) + '&type=ALL'
     r = requests.post(url)
-    try:
-        if r.text == "":
-            print("No data for this day")
-            pass
-        elif r.text is not None:
-            r_text_stocks = '\n'.join(
-                [line for line in r.text.split("\n") if len(line.split('",')) == 17 and line[0] != "="])
-            r_pd = pd.read_csv(StringIO(r_text_stocks)).rename(columns={'Unnamed: 16': 'date'})
-            r_pd.loc[:, 'date'] = date
-            with open(str(fileName) + ".csv", "r", encoding="utf-8") as file:
-                # csv_reader = csv.DictReader(file)
-                csv_reader = pd.read_csv(file)
-                if date not in list(csv_reader["date"]):
-                    try:
-                        r_pd.to_csv(str(fileName) + ".csv", mode="a", header=False, encoding="utf_8_sig")
-                    except Exception as error:
-                        print(error)
-                        print("Data of this day already exist")
 
-    except Exception as error:
-        print(error)
+    if r.status_code == requests.codes.ok:
+
+        try:
+            if r.text == "":
+                print("No data for this day")
+                pass
+
+            elif r.text is not None:
+                r_text_stocks = '\n'.join(
+                    [line for line in r.text.split("\n") if len(line.split('",')) == 17 and line[0] != "="])
+                r_pd = pd.read_csv(StringIO(r_text_stocks)).rename(columns={'Unnamed: 16': 'date'})
+                r_pd.loc[:, 'date'] = int(date)
+                r_pd["成交股數"] = r_pd["成交股數"].str.replace(",", "")
+                r_pd["成交筆數"] = r_pd["成交筆數"].str.replace(",", "")
+                r_pd["成交金額"] = r_pd["成交金額"].str.replace(",", "")
+                r_pd["成交股數"] = r_pd["成交股數"].astype(float)
+                r_pd["成交筆數"] = r_pd["成交筆數"].astype(float)
+                r_pd["成交金額"] = r_pd["成交金額"].astype(float)
+                return r_pd
+
+        except Exception as error:
+            print(error)
+            pass
+
+# def craw_data(date, fileName):
+#     url = twseStockUrl + str(date) + '&type=ALL'
+#     r = requests.post(url)
+#     try:
+#         if r.text == "":
+#             print("No data for this day")
+#             pass
+#         elif r.text is not None:
+#             r_text_stocks = '\n'.join(
+#                 [line for line in r.text.split("\n") if len(line.split('",')) == 17 and line[0] != "="])
+#             r_pd = pd.read_csv(StringIO(r_text_stocks)).rename(columns={'Unnamed: 16': 'date'})
+#             r_pd.loc[:, 'date'] = date
+#             with open(str(fileName) + ".csv", "r", encoding="utf-8") as file:
+#                 # csv_reader = csv.DictReader(file)
+#                 csv_reader = pd.read_csv(file)
+#                 if date not in list(csv_reader["date"]):
+#                     try:
+#                         r_pd.to_csv(str(fileName) + ".csv", mode="a", header=False, encoding="utf_8_sig")
+#                     except Exception as error:
+#                         print(error)
+#                         print("Data of this day already exist")
+#
+#     except Exception as error:
+#         print(error)
 
 #
 # class Crawler:
@@ -41,3 +71,93 @@ start_day = input('starting day (in format %Y%m%d) :')
 start_day_pd_dt = pd.to_datetime(start_day, format="%Y%m%d", errors="ignore")
 file_name = input('Input File name : ')
 craw_data(start_day, file_name)
+
+# Write fetched data to local csv
+def write_data_to_csv(data, file_name):
+    directory = pathlib.Path(__file__).parent.absolute()
+
+    with open(str(file_name) + ".csv", "r", encoding="utf_8") as file:
+        csv_reader = pd.read_csv(file)
+        date_list = csv_reader['date'].tolist()
+    date = data.loc[0, "date"]
+
+    if int(date) not in date_list:
+        try:
+            data.to_csv(str(directory) + "\\" + str(file_name) + ".csv", mode="a", header=False, encoding="utf_8_sig")
+        except Exception as error:
+            print(error)
+    else:
+        print("Data of this day already exist")
+
+
+def fetch_and_write(date, file_name):
+    fetch_date = fetch_data_from_twse(date)
+    if fetch_date is not None:
+        try:
+            write_data_to_csv(fetch_date, file_name)
+        except Exception as error:
+            print(error)
+    else: pass
+
+
+# Filtering data with stock id and date
+# Get full data from local csv file
+def get_full_data(file_name):
+    dir = pathlib.Path(__file__).parent.absolute()
+    with open(str(dir) + "\\" + str(file_name) + ".csv", "r", encoding="utf_8") as file:
+        csv_reader = pd.read_csv(file)
+        return csv_reader
+
+
+# Get data from local csv file with stock id
+def get_data_with_id(csv_reader, stock_id):
+    filtered_pd_data = csv_reader.loc[csv_reader["證券代號"] == str(stock_id)]
+    return filtered_pd_data
+
+
+# Get data from local csv with date range
+def get_data_between_date(csv_reader, start, end):
+    date_range = range(int(start), int(end)+1)
+    filtered_pd_data = csv_reader.loc[csv_reader["date"].astype(int).isin(date_range)]
+    filtered_pd_data.sort_values("date")
+    return filtered_pd_data
+
+
+# Plot methods
+def plot_time_transaction(pd_data):
+    pd_data.reset_index(drop=True).plot(y="成交股數", use_index=True)
+
+
+# Decision methods
+def observe_transaction(pd_data):
+    n = pd_data["index"].size
+    if n > 5:
+        averageTransation = pd_data["成交股數"].iloc[0: (n - 5)].mean()
+        latestTransation = pd_data["成交股數"].iloc[(n - 5): n].mean()
+        transationDelta = latestTransation - averageTransation
+        if (transationDelta) > 0:
+            if (transationDelta / averageTransation) > 0.2:
+                print(str(pd_data) + " , data number = " + str(n))
+            else:
+                pass
+        else:
+            pass
+
+    else:
+        averageTransation = pd_data["成交股數"].iloc[0: (n - 5)].mean()
+        latestTransation = pd_data["成交股數"].iloc[(n - 5): n].mean()
+        transationDelta = latestTransation - averageTransation
+        if (transationDelta) > 0:
+            if (transationDelta / averageTransation) > 0.2:
+                print(str(pd_data) + " , data number = " + str(n))
+            else:
+                pass
+        else:
+            pass
+
+
+
+# start_day = input('starting day (in format %Y%m%d) :')
+# start_day_pd_dt = pd.to_datetime(start_day, format="%Y%m%d", errors="ignore")
+# file_name = input('Input File name : ')
+# get_and_write_craw_data(start_day, file_name)
