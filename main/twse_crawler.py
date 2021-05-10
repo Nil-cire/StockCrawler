@@ -1,14 +1,16 @@
+import abc
+
 def url_format(url1, url2, url3 = None, url4 = None, url5 = None, url6 = None):
-    list = [url1, url2, url3, url4, url5, url6]
-    targetUrl = ""
+    url_list = [url1, url2, url3, url4, url5, url6]
+    target_url = ""
     for i in list:
         if i is not None:
-            targetUrl + str(i)
+            target_url + str(i)
 
-    return targetUrl
+    return target_url
 
 
-class Crawler():
+class Crawler(metaclass=abc.ABCMeta):
 
     def __init__(self):
 
